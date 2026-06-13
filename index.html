@@ -88,14 +88,17 @@
   .weekday-row{display:grid; grid-template-columns:repeat(7,1fr); gap:4px; text-align:center;
     font-size:0.75rem; font-weight:700; color:var(--muted); margin-bottom:4px;}
   .day-grid{display:grid; grid-template-columns:repeat(7,1fr); gap:4px;}
-  .day-cell{aspect-ratio:1/1; border:none; border-radius:12px; background:transparent;
-    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px;
-    font-weight:700; font-size:0.875rem; color:var(--ink); cursor:pointer; font-family:inherit; padding:0;}
+  .day-cell{min-height:58px; border:none; border-radius:12px; background:transparent;
+    display:flex; flex-direction:column; align-items:center; gap:2px;
+    font-weight:700; font-size:0.8rem; color:var(--ink); cursor:pointer; font-family:inherit; padding:4px 2px;}
   .day-cell.other{color:var(--border); cursor:default;}
   .day-cell.today{background:#E9F3ED;}
   .day-cell.selected{background:var(--sage); color:#fff;}
-  .day-dots{display:flex; gap:2px; height:6px;}
-  .day-dot{width:6px; height:6px; border-radius:999px; display:block;}
+  .day-names{display:flex; flex-direction:column; gap:1px; width:100%; align-items:stretch;}
+  .day-chip{font-size:0.55rem; line-height:1.3; padding:1px 3px; border-radius:5px; color:#fff;
+    font-weight:700; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .day-more{font-size:0.55rem; font-weight:700; color:var(--muted);}
+  .day-cell.selected .day-more{color:rgba(255,255,255,0.85);}
 
   .detail-title{margin:0 0 8px; font-size:1.125rem; font-weight:600; color:var(--sage-dark);}
   .muted-text{color:var(--muted); font-size:0.875rem; margin:0;}
@@ -398,8 +401,9 @@
       if(!d.cur) classes.push('other');
       if(isToday) classes.push('today');
       if(isSelected) classes.push('selected');
-      const dots = dayReqs.slice(0,3).map(r=>`<span class="day-dot" style="background:${isSelected?'rgba(255,255,255,0.9)':getChildColor(r.childName)}"></span>`).join('');
-      return `<button class="${classes.join(' ')}" ${d.cur?`data-date="${dateStr}"`:'disabled'}><span>${d.day}</span><span class="day-dots">${dots}</span></button>`;
+      const dots = dayReqs.slice(0,2).map(r=>`<span class="day-chip" style="background:${getChildColor(r.childName)}">${escapeHtml(r.childName)}</span>`).join('')
+        + (dayReqs.length > 2 ? `<span class="day-more">+${dayReqs.length - 2}</span>` : '');
+      return `<button class="${classes.join(' ')}" ${d.cur?`data-date="${dateStr}"`:'disabled'}><span>${d.day}</span><span class="day-names">${dots}</span></button>`;
     }).join('');
 
     return `
