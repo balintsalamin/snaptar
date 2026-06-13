@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Ki vigyáz mikor? – Családi naptár</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --cream:#FBF3E6; --ink:#3A332C; --sage:#4F7A61; --sage-dark:#3D6350;
+    --card:#FFFDF8; --muted:#6E5F50; --border:#EFE3D2; --danger:#B5495B;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;}
+  body{
+    font-family:'Nunito',system-ui,sans-serif;
+    background:var(--cream); color:var(--ink);
+    -webkit-text-size-adjust:100%;
+  }
+  h1,h2,h3,.ff-display{font-family:'Fredoka',system-ui,sans-serif;}
+  .page{max-width:480px; margin:0 auto; padding:0 16px 40px;}
+  .app-header{padding:24px 0 12px;}
+  .app-header h1{font-size:1.875rem; font-weight:600; color:var(--sage-dark); margin:0;}
+  .app-header p{font-size:0.875rem; color:var(--muted); margin:4px 0 0;}
+
+  .tab-bar{display:flex; gap:8px; background:var(--border); border-radius:16px; padding:4px; margin-bottom:16px;}
+  .tab-btn{flex:1; border:none; background:none; padding:10px 4px; border-radius:12px; font-weight:700; font-size:0.875rem; color:var(--muted); cursor:pointer; font-family:inherit;}
+  .tab-btn.active{background:var(--sage); color:#fff;}
+
+  .toast{position:fixed; top:12px; left:16px; right:16px; max-width:448px; margin:0 auto;
+    padding:12px 16px; border-radius:12px; font-weight:700; font-size:0.875rem;
+    box-shadow:0 4px 12px rgba(0,0,0,0.12); z-index:50; background:#E9F3ED; color:var(--sage-dark);
+    border:1px solid #CFE6D9;}
+  .toast.error{background:#FBEAEA; color:var(--danger); border-color:#F2CFCF;}
+  .toast.hidden{display:none;}
+
+  .card{background:var(--card); border:1px solid var(--border); border-radius:24px; padding:20px;
+    box-shadow:0 1px 2px rgba(0,0,0,0.03); margin-bottom:16px;}
+
+  .field{margin-bottom:12px;}
+  .field label{display:block; font-size:0.875rem; font-weight:700; margin-bottom:4px;}
+  .field input, .field textarea{
+    width:100%; border:1.5px solid var(--border); border-radius:12px; padding:10px 14px;
+    font-size:1rem; font-family:inherit; background:#fff; color:var(--ink);
+  }
+  .field input:focus, .field textarea:focus{
+    outline:none; border-color:var(--sage); box-shadow:0 0 0 3px rgba(79,122,97,0.18);
+  }
+  .field input:disabled{background:#F6F1E9; color:var(--muted);}
+
+  .row-2{display:grid; grid-template-columns:1fr 1fr; gap:12px;}
+
+  .checkbox-row{display:flex; align-items:center; gap:12px; padding:6px 0 12px; cursor:pointer; font-weight:700;}
+  .checkbox-row input{width:20px; height:20px; accent-color:var(--sage);}
+
+  .btn{display:flex; align-items:center; justify-content:center; gap:8px; width:100%;
+    border:none; border-radius:16px; padding:14px; font-weight:700; font-size:1rem;
+    font-family:inherit; cursor:pointer; transition:transform .1s, opacity .2s;}
+  .btn:active{transform:scale(0.98);}
+  .btn-primary{background:var(--sage); color:#fff;}
+  .btn-primary.added{background:var(--sage-dark);}
+  .btn-outline{background:#fff; color:var(--sage-dark); border:1.5px solid var(--sage); margin-bottom:16px;}
+  .btn-outline:disabled{opacity:0.5; cursor:default;}
+  .btn-danger{background:var(--danger); color:#fff;}
+
+  .error-text{color:var(--danger); font-weight:700; font-size:0.875rem; margin-bottom:8px;}
+
+  .child-tag{display:inline-flex; align-items:center; gap:4px; border-radius:999px; color:#fff;
+    font-weight:700; font-size:0.875rem; padding:4px 10px;}
+
+  .entry-card{background:var(--cream); border-radius:16px; padding:14px; border-left:5px solid; margin-bottom:12px;}
+  .entry-card:last-child{margin-bottom:0;}
+  .entry-time{font-weight:700; font-size:0.875rem; display:flex; align-items:center; gap:6px; margin:8px 0 0;}
+  .entry-notes{font-size:0.875rem; margin:6px 0 0; line-height:1.4;}
+  .entry-actions{display:flex; gap:8px; margin-top:12px;}
+  .entry-actions .btn{width:auto; flex:1; padding:10px; font-size:0.875rem; margin-bottom:0;}
+
+  .calendar-head{display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;}
+  .calendar-head > button{background:none; border:none; font-size:1.5rem; line-height:1; color:var(--sage-dark);
+    cursor:pointer; padding:4px 14px; font-family:inherit; border-radius:10px;}
+  .cal-title{text-align:center;}
+  .cal-title h2{margin:0; font-size:1.25rem; font-weight:600; color:var(--sage-dark);}
+  .cal-title button{font-size:0.75rem; font-weight:700; color:var(--sage-dark); background:none;
+    border:none; cursor:pointer; padding:0; font-family:inherit;}
+
+  .weekday-row{display:grid; grid-template-columns:repeat(7,1fr); gap:4px; text-align:center;
+    font-size:0.75rem; font-weight:700; color:var(--muted); margin-bottom:4px;}
+  .day-grid{display:grid; grid-template-columns:repeat(7,1fr); gap:4px;}
+  .day-cell{aspect-ratio:1/1; border:none; border-radius:12px; background:transparent;
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px;
+    font-weight:700; font-size:0.875rem; color:var(--ink); cursor:pointer; font-family:inherit; padding:0;}
+  .day-cell.other{color:var(--border); cursor:default;}
+  .day-cell.today{background:#E9F3ED;}
+  .day-cell.selected{background:var(--sage); color:#fff;}
+  .day-dots{display:flex; gap:2px; height:6px;}
+  .day-dot{width:6px; height:6px; border-radius:999px; display:block;}
+
+  .detail-title{margin:0 0 8px; font-size:1.125rem; font-weight:600; color:var(--sage-dark);}
+  .muted-text{color:var(--muted); font-size:0.875rem; margin:0;}
+  .list-date-header{font-family:'Fredoka',system-ui,sans-serif; font-size:0.875rem; font-weight:700;
+    color:var(--sage-dark); margin:12px 0 6px;}
+  .list-date-header:first-child{margin-top:0;}
+
+  .empty-state{text-align:center;}
+  .empty-state p:first-child{font-weight:700; margin:0 0 4px;}
+
+  .password-gate{text-align:center;}
+  .lock-icon{font-size:2rem; margin-bottom:8px;}
+
+  .loading{text-align:center; padding:60px 0; color:var(--muted); font-weight:700;}
+
+  .setup-warning{background:#FBEAEA; border:1px solid #F2CFCF; color:var(--danger);}
+  .setup-warning code{background:#fff; padding:2px 6px; border-radius:6px; font-size:0.85em;}
+</style>
+</head>
+<body>
+  <div class="page">
+    <header class="app-header">
+      <h1>Ki vigyáz mikor?</h1>
+      <p>Családi naptár a gyerekvigyázás összehangolásához</p>
+    </header>
+    <nav class="tab-bar">
+      <button class="tab-btn" data-tab="form">Új igénylés</button>
+      <button class="tab-btn" data-tab="calendar">Naptár</button>
+      <button class="tab-btn" data-tab="list">Lista</button>
+    </nav>
+    <div id="toast" class="toast hidden"></div>
+    <main id="content"></main>
+  </div>
+
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+  import { getFirestore, collection, addDoc, deleteDoc, doc, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+  // ====================================================================
+  //  IDE ÍRD BE A SAJÁT FIREBASE-ADATAIDAT (lásd az útmutató 2. lépését)
+  // ====================================================================
+  const firebaseConfig = {
+    apiKey: "IDE_MASOLD_AZ_API_KEY-T",
+    authDomain: "IDE_MASOLD_AZ_AUTH_DOMAIN-T",
+    projectId: "IDE_MASOLD_A_PROJECT_ID-T",
+    storageBucket: "IDE_MASOLD_A_STORAGE_BUCKET-ET",
+    messagingSenderId: "IDE_MASOLD_A_MESSAGING_SENDER_ID-T",
+    appId: "IDE_MASOLD_AZ_APP_ID-T"
+  };
+  // ====================================================================
+
+  // ---------- Konstansok ----------
+  const HONAPOK = ['január','február','március','április','május','június','július','augusztus','szeptember','október','november','december'];
+  const HETNAPOK_ROVID = ['H','K','Sze','Cs','P','Szo','V'];
+  const HETNAPOK_TELJES = ['vasárnap','hétfő','kedd','szerda','csütörtök','péntek','szombat'];
+  const CHILD_COLORS = ['#BD5429','#6B7A35','#3D6A91','#7E5790','#8A6A12','#A8447E','#347468'];
+  const PASSWORD = 'alma123'; // ide írhatod át a saját jelszavadat
+
+  // ---------- Dátum segédfüggvények ----------
+  function toISODate(d){ const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,'0'), dd=String(d.getDate()).padStart(2,'0'); return `${y}-${m}-${dd}`; }
+  function todayISO(){ return toISODate(new Date()); }
+  function addDays(dateStr,n){ const d=new Date(dateStr+'T00:00:00'); d.setDate(d.getDate()+n); return toISODate(d); }
+  function getDaysInMonth(y,m){ return new Date(y,m+1,0).getDate(); }
+  function getFirstDayOfMonth(y,m){ return (new Date(y,m,1).getDay()+6)%7; }
+  function getCalendarDays(y,m){
+    const firstDay=getFirstDayOfMonth(y,m);
+    const daysInMonth=getDaysInMonth(y,m);
+    const prevMonthDays=getDaysInMonth(m===0?y-1:y, m===0?11:m-1);
+    const days=[];
+    for(let i=firstDay-1;i>=0;i--) days.push({day:prevMonthDays-i, cur:false});
+    for(let d=1;d<=daysInMonth;d++) days.push({day:d, cur:true, dateStr:toISODate(new Date(y,m,d))});
+    const rem=(7-(days.length%7))%7;
+    for(let d=1;d<=rem;d++) days.push({day:d, cur:false});
+    return days;
+  }
+  function formatDate(dateStr){ const d=new Date(dateStr+'T00:00:00'); return `${d.getFullYear()}. ${HONAPOK[d.getMonth()]} ${d.getDate()}.`; }
+  function formatDateWithDay(dateStr){ const d=new Date(dateStr+'T00:00:00'); return `${formatDate(dateStr)} (${HETNAPOK_TELJES[d.getDay()]})`; }
+
+  // ---------- Szín segédfüggvény ----------
+  function getChildColor(name){
+    let hash=0;
+    for(let i=0;i<name.length;i++) hash=name.charCodeAt(i)+((hash<<5)-hash);
+    return CHILD_COLORS[Math.abs(hash)%CHILD_COLORS.length];
+  }
+
+  // ---------- HTML escape (biztonság) ----------
+  function escapeHtml(s){
+    return String(s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  // ---------- ICS (naptárfájl) segédfüggvények ----------
+  function escapeICS(str){
+    return (str||'').replace(/\\/g,'\\\\').replace(/;/g,'\\;').replace(/,/g,'\\,').replace(/\n/g,'\\n');
+  }
+  function toICSDateTime(dateStr,timeStr){ return dateStr.replace(/-/g,'')+'T'+timeStr.replace(':','')+'00'; }
+  function toICSTimestamp(d){ return d.toISOString().replace(/[-:]/g,'').split('.')[0]+'Z'; }
+  function buildICSEvent(r){
+    const start=toICSDateTime(r.startDate,r.startTime);
+    const end=toICSDateTime(r.endDate,r.endTime);
+    const title=`${r.childName} – vigyázás${r.overnight?' (ottalvós)':''}`;
+    const descParts=[];
+    if(r.notes) descParts.push(r.notes);
+    const desc=descParts.join('\n');
+    const lines=['BEGIN:VEVENT', `UID:${r.id}@csaladi-vigyazas-naptar`, `DTSTAMP:${toICSTimestamp(new Date())}`, `DTSTART:${start}`, `DTEND:${end}`, `SUMMARY:${escapeICS(title)}`];
+    if(desc) lines.push(`DESCRIPTION:${escapeICS(desc)}`);
+    lines.push('END:VEVENT');
+    return lines.join('\r\n');
+  }
+  function buildICS(reqs){
+    return ['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//Csaladi Vigyazas Naptar//HU','CALSCALE:GREGORIAN', ...reqs.map(buildICSEvent), 'END:VCALENDAR'].join('\r\n');
+  }
+  function downloadICS(content, filename){
+    const blob=new Blob([content], {type:'text/calendar;charset=utf-8'});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    a.href=url; a.download=filename;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(()=>URL.revokeObjectURL(url), 200);
+  }
+
+  // ---------- Állapot ----------
+  const state = {
+    tab: 'calendar',
+    ready: false,
+    requests: [],
+    unlocked: false,
+    cursor: (()=>{ const d=new Date(); return {y:d.getFullYear(), m:d.getMonth()}; })(),
+    selected: todayISO(),
+  };
+
+  // ---------- Toast ----------
+  let toastTimer = null;
+  function showToast(msg, isError=false){
+    const el = document.getElementById('toast');
+    el.textContent = (isError ? '⚠ ' : '✓ ') + msg;
+    el.className = 'toast' + (isError ? ' error' : '');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(()=>{ el.className='toast hidden'; }, 3500);
+  }
+
+  // ---------- Render: belépő képernyő ----------
+  function renderLoading(){ return `<div class="loading">Betöltés…</div>`; }
+
+  function renderPasswordGate(){
+    return `
+      <div class="card password-gate">
+        <div class="lock-icon">🔒</div>
+        <p style="font-weight:700;margin:0 0 12px">Ehhez jelszó szükséges</p>
+        <form id="pwForm">
+          <div class="field"><input type="password" name="pw" autocomplete="off" style="text-align:center"></div>
+          <div id="pwError" class="error-text" style="display:none">Hibás jelszó, próbáld újra.</div>
+          <button type="submit" class="btn btn-primary">Belépés</button>
+        </form>
+      </div>`;
+  }
+
+  // ---------- Render: Új igénylés ----------
+  function renderForm(){
+    const today = todayISO();
+    const children = [...new Set(state.requests.map(r=>r.childName))].sort();
+    return `
+      <form id="addForm" class="card">
+        <div class="field">
+          <label for="childNameInput">Melyik gyerek?</label>
+          <input id="childNameInput" name="childName" list="children-list" required>
+          <datalist id="children-list">${children.map(c=>`<option value="${escapeHtml(c)}">`).join('')}</datalist>
+        </div>
+        <div class="row-2">
+          <div class="field"><label>Mettől – dátum</label><input type="date" name="startDate" id="startDateInput" value="${today}" required></div>
+          <div class="field"><label>Mettől – idő</label><input type="time" name="startTime" value="08:00" required></div>
+        </div>
+        <label class="checkbox-row"><input type="checkbox" name="overnight" id="overnightChk"> 🌙 Ottalvós lesz</label>
+        <div class="row-2">
+          <div class="field"><label id="endDateLabel">Eddig – dátum</label><input type="date" name="endDate" id="endDateInput" value="${today}" min="${today}" disabled></div>
+          <div class="field"><label id="endTimeLabel">Eddig – idő</label><input type="time" name="endTime" id="endTimeInput" value="17:00"></div>
+        </div>
+        <div class="field"><label>Megjegyzés (opcionális)</label><textarea name="notes" rows="3"></textarea></div>
+        <div id="formError" class="error-text" style="display:none"></div>
+        <button type="submit" class="btn btn-primary" id="submitBtn">Hozzáadás a naptárhoz</button>
+      </form>`;
+  }
+
+  function initFormHandlers(content){
+    const form = content.querySelector('#addForm');
+    const chk = form.querySelector('#overnightChk');
+    const startDateInput = form.querySelector('#startDateInput');
+    const endDateInput = form.querySelector('#endDateInput');
+    const endTimeInput = form.querySelector('#endTimeInput');
+    const endDateLabel = form.querySelector('#endDateLabel');
+    const endTimeLabel = form.querySelector('#endTimeLabel');
+
+    chk.addEventListener('change', ()=>{
+      if(chk.checked){
+        endDateInput.disabled = false;
+        endDateInput.min = startDateInput.value;
+        endDateInput.value = addDays(startDateInput.value, 1);
+        endTimeInput.value = '09:00';
+        endDateLabel.textContent = 'Meddig – dátum';
+        endTimeLabel.textContent = 'Hazaviszik – idő';
+      } else {
+        endDateInput.disabled = true;
+        endDateInput.value = startDateInput.value;
+        endTimeInput.value = '17:00';
+        endDateLabel.textContent = 'Eddig – dátum';
+        endTimeLabel.textContent = 'Eddig – idő';
+      }
+    });
+
+    startDateInput.addEventListener('change', ()=>{
+      endDateInput.min = startDateInput.value;
+      if(!chk.checked) endDateInput.value = startDateInput.value;
+      else if(endDateInput.value < startDateInput.value) endDateInput.value = addDays(startDateInput.value, 1);
+    });
+
+    form.addEventListener('submit', async (e)=>{
+      e.preventDefault();
+      const fd = new FormData(form);
+      const childName = (fd.get('childName')||'').trim();
+      const errEl = form.querySelector('#formError');
+      if(!childName){ errEl.textContent='Add meg, melyik gyerekről van szó.'; errEl.style.display='block'; return; }
+      const overnight = fd.get('overnight') === 'on';
+      const data = {
+        childName,
+        startDate: fd.get('startDate'),
+        startTime: fd.get('startTime'),
+        overnight,
+        endDate: overnight ? fd.get('endDate') : fd.get('startDate'),
+        endTime: fd.get('endTime'),
+        notes: (fd.get('notes')||'').trim(),
+      };
+      if(data.endDate < data.startDate){ errEl.textContent='A befejezés dátuma nem lehet a kezdés előtt.'; errEl.style.display='block'; return; }
+      errEl.style.display='none';
+
+      const btn = form.querySelector('#submitBtn');
+      btn.disabled = true;
+      const ok = await addEvent(data);
+      if(ok){
+        btn.classList.add('added');
+        btn.textContent = '✓ Hozzáadva!';
+        form.reset();
+        endDateInput.disabled = true;
+        endDateInput.value = startDateInput.value;
+        endTimeInput.value = '17:00';
+        endDateLabel.textContent = 'Eddig – dátum';
+        endTimeLabel.textContent = 'Eddig – idő';
+        setTimeout(()=>{ btn.classList.remove('added'); btn.textContent='Hozzáadás a naptárhoz'; btn.disabled=false; }, 2000);
+      } else {
+        btn.disabled = false;
+      }
+    });
+  }
+
+  // ---------- Render: egy esemény kártya (Naptár + Lista közös) ----------
+  function renderEntryCard(r){
+    const sameDay = r.startDate === r.endDate;
+    const timeStr = sameDay ? `${r.startTime} – ${r.endTime}` : `${formatDate(r.startDate)} ${r.startTime} – ${formatDate(r.endDate)} ${r.endTime}`;
+    const color = getChildColor(r.childName);
+    return `
+      <div class="entry-card" style="border-left-color:${color}">
+        <span class="child-tag" style="background:${color}">${escapeHtml(r.childName)}${r.overnight ? ' 🌙' : ''}</span>
+        <p class="entry-time">${timeStr}</p>
+        ${r.notes ? `<p class="entry-notes">${escapeHtml(r.notes)}</p>` : ''}
+        <div class="entry-actions">
+          <button class="btn btn-outline" data-action="export-one" data-id="${r.id}">Naptáramba</button>
+          ${state.unlocked ? `<button class="btn btn-danger" data-action="delete" data-id="${r.id}">Törlés</button>` : ''}
+        </div>
+      </div>`;
+  }
+
+  function bindEntryActions(content){
+    content.querySelectorAll('[data-action="export-one"]').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const r = state.requests.find(x=>x.id===btn.dataset.id);
+        if(r) downloadICS(buildICS([r]), `vigyazas-${r.childName}-${r.startDate}.ics`);
+      });
+    });
+    content.querySelectorAll('[data-action="delete"]').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        if(confirm('Biztosan törlöd ezt a bejegyzést?')) deleteEvent(btn.dataset.id);
+      });
+    });
+  }
+
+  // ---------- Render: Naptár ----------
+  function renderCalendar(){
+    const { y, m } = state.cursor;
+    const days = getCalendarDays(y, m);
+    const reqsForDate = (dateStr) => state.requests.filter(r => dateStr >= r.startDate && dateStr <= r.endDate).sort((a,b)=>a.startTime.localeCompare(b.startTime));
+    const monthStart = toISODate(new Date(y,m,1));
+    const monthEnd = toISODate(new Date(y,m+1,0));
+    const monthReqs = state.requests.filter(r => r.endDate >= monthStart && r.startDate <= monthEnd);
+    const selectedReqs = reqsForDate(state.selected);
+
+    const dayCells = days.map(d=>{
+      const dateStr = d.cur ? d.dateStr : null;
+      const dayReqs = dateStr ? reqsForDate(dateStr) : [];
+      const isToday = dateStr === todayISO();
+      const isSelected = dateStr === state.selected;
+      const classes = ['day-cell'];
+      if(!d.cur) classes.push('other');
+      if(isToday) classes.push('today');
+      if(isSelected) classes.push('selected');
+      const dots = dayReqs.slice(0,3).map(r=>`<span class="day-dot" style="background:${isSelected?'rgba(255,255,255,0.9)':getChildColor(r.childName)}"></span>`).join('');
+      return `<button class="${classes.join(' ')}" ${d.cur?`data-date="${dateStr}"`:'disabled'}><span>${d.day}</span><span class="day-dots">${dots}</span></button>`;
+    }).join('');
+
+    return `
+      <div class="card">
+        <div class="calendar-head">
+          <button data-action="prev-month" aria-label="Előző hónap">‹</button>
+          <div class="cal-title"><h2>${HONAPOK[m]} ${y}</h2><button data-action="today">Ma</button></div>
+          <button data-action="next-month" aria-label="Következő hónap">›</button>
+        </div>
+        <div class="weekday-row">${HETNAPOK_ROVID.map(d=>`<div>${d}</div>`).join('')}</div>
+        <div class="day-grid">${dayCells}</div>
+      </div>
+      <button class="btn btn-outline" id="exportMonthBtn" ${monthReqs.length===0?'disabled':''}>Ez a hónap naptárfájlba (.ics)</button>
+      <div class="card">
+        <h3 class="detail-title">${formatDateWithDay(state.selected)}</h3>
+        ${selectedReqs.length===0
+          ? `<p class="muted-text">Erre a napra nincs beírva vigyázás.</p>`
+          : selectedReqs.map(renderEntryCard).join('')}
+      </div>`;
+  }
+
+  function initCalendarHandlers(content){
+    content.querySelector('[data-action="prev-month"]').addEventListener('click', ()=>{
+      let {y,m} = state.cursor; m--; if(m<0){m=11;y--;}
+      setCursor(y,m);
+    });
+    content.querySelector('[data-action="next-month"]').addEventListener('click', ()=>{
+      let {y,m} = state.cursor; m++; if(m>11){m=0;y++;}
+      setCursor(y,m);
+    });
+    content.querySelector('[data-action="today"]').addEventListener('click', ()=>{
+      const t = new Date();
+      state.cursor = {y:t.getFullYear(), m:t.getMonth()};
+      state.selected = todayISO();
+      renderContent();
+    });
+    content.querySelectorAll('.day-cell[data-date]').forEach(cell=>{
+      cell.addEventListener('click', ()=>{ state.selected = cell.dataset.date; renderContent(); });
+    });
+    const exportBtn = content.querySelector('#exportMonthBtn');
+    if(exportBtn && !exportBtn.disabled){
+      exportBtn.addEventListener('click', ()=>{
+        const {y,m} = state.cursor;
+        const monthStart = toISODate(new Date(y,m,1)), monthEnd = toISODate(new Date(y,m+1,0));
+        const monthReqs = state.requests.filter(r=>r.endDate>=monthStart && r.startDate<=monthEnd);
+        downloadICS(buildICS(monthReqs), `vigyazas-${y}-${String(m+1).padStart(2,'0')}.ics`);
+      });
+    }
+    bindEntryActions(content);
+  }
+
+  function setCursor(y,m){
+    state.cursor = {y,m};
+    const t = new Date();
+    state.selected = (y===t.getFullYear() && m===t.getMonth()) ? todayISO() : toISODate(new Date(y,m,1));
+    renderContent();
+  }
+
+  // ---------- Render: Lista ----------
+  function renderList(){
+    const sorted = [...state.requests].sort((a,b)=>(a.startDate+a.startTime).localeCompare(b.startDate+b.startTime));
+    if(sorted.length===0){
+      return `<div class="card empty-state"><p>Még nincs beírt időpont.</p><p class="muted-text">Az "Új igénylés" fülön tudsz felvinni egyet.</p></div>`;
+    }
+    let html = `<button class="btn btn-outline" id="exportAllBtn">Összes naptárfájlba (.ics)</button><div class="card">`;
+    sorted.forEach((r,i)=>{
+      if(i===0 || sorted[i-1].startDate !== r.startDate) html += `<p class="list-date-header">${formatDateWithDay(r.startDate)}</p>`;
+      html += renderEntryCard(r);
+    });
+    html += `</div>`;
+    return html;
+  }
+
+  function initListHandlers(content){
+    const exportAllBtn = content.querySelector('#exportAllBtn');
+    if(exportAllBtn) exportAllBtn.addEventListener('click', ()=> downloadICS(buildICS(state.requests), 'csaladi-vigyazas-naptar.ics'));
+    bindEntryActions(content);
+  }
+
+  function initPasswordHandlers(content){
+    const form = content.querySelector('#pwForm');
+    form.addEventListener('submit', (e)=>{
+      e.preventDefault();
+      const val = new FormData(form).get('pw');
+      if(val === PASSWORD){ state.unlocked = true; renderContent(); }
+      else {
+        content.querySelector('#pwError').style.display='block';
+        form.reset();
+        form.querySelector('input').focus();
+      }
+    });
+  }
+
+  // ---------- Fő render ----------
+  function renderContent(){
+    document.querySelectorAll('.tab-btn').forEach(b=>b.classList.toggle('active', b.dataset.tab===state.tab));
+    const content = document.getElementById('content');
+    if(!state.ready){ content.innerHTML = renderLoading(); return; }
+    if(state.tab==='form') content.innerHTML = state.unlocked ? renderForm() : renderPasswordGate();
+    else if(state.tab==='calendar') content.innerHTML = renderCalendar();
+    else content.innerHTML = renderList();
+
+    if(state.tab==='form'){
+      if(state.unlocked) initFormHandlers(content);
+      else initPasswordHandlers(content);
+    } else if(state.tab==='calendar') initCalendarHandlers(content);
+    else initListHandlers(content);
+  }
+
+  document.querySelectorAll('.tab-btn').forEach(btn=>{
+    btn.addEventListener('click', ()=>{ state.tab = btn.dataset.tab; renderContent(); });
+  });
+
+  // ---------- Firebase ----------
+  if(firebaseConfig.apiKey.startsWith('IDE_')){
+    document.getElementById('content').innerHTML = `
+      <div class="card setup-warning">
+        <p style="font-weight:700;margin:0 0 8px">⚠ Még nincs beállítva a Firebase</p>
+        <p style="margin:0;font-size:0.9rem;line-height:1.5">
+          Kövesd az útmutató 2. lépését: hozz létre egy Firebase-projektet, és másold be a saját
+          <code>firebaseConfig</code> adataidat ennek a fájlnak az elejére (a "IDE ÍRD BE..." rész helyére).
+        </p>
+      </div>`;
+  } else {
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+    const eventsCol = collection(db, 'events');
+
+    async function addEvent(data){
+      try{
+        await addDoc(eventsCol, { ...data, createdAt: serverTimestamp() });
+        return true;
+      }catch(err){
+        showToast('Hiba történt a mentés közben: ' + err.message, true);
+        return false;
+      }
+    }
+    async function deleteEvent(id){
+      try{
+        await deleteDoc(doc(db, 'events', id));
+        showToast('Törölve.');
+      }catch(err){
+        showToast('Hiba történt a törlés közben: ' + err.message, true);
+      }
+    }
+    // globálissá tesszük, hogy a fenti handler-ek elérjék
+    window.addEvent = addEvent;
+    window.deleteEvent = deleteEvent;
+
+    onSnapshot(eventsCol, (snap)=>{
+      state.requests = snap.docs.map(d=>({ id:d.id, ...d.data() }));
+      const wasReady = state.ready;
+      state.ready = true;
+      if(!wasReady || state.tab==='calendar' || state.tab==='list') renderContent();
+    }, (err)=>{
+      state.ready = true;
+      renderContent();
+      showToast('Nem sikerült csatlakozni az adatbázishoz: ' + err.message, true);
+    });
+
+    renderContent();
+  }
+
+  // a form/lista/naptár handlerek window.addEvent / window.deleteEvent-et hívják
+  function addEvent(data){ return window.addEvent(data); }
+  function deleteEvent(id){ return window.deleteEvent(id); }
+</script>
+</body>
+</html>
