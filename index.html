@@ -74,6 +74,11 @@
   .entry-card:last-child{margin-bottom:0;}
   .entry-time{font-weight:700; font-size:0.875rem; display:flex; align-items:center; gap:6px; margin:8px 0 0;}
   .entry-notes{font-size:0.875rem; margin:6px 0 0; line-height:1.4;}
+  .caregiver-tags{display:flex; gap:6px; flex-wrap:wrap; margin-top:6px;}
+  .caregiver-tag{font-size:0.75rem; font-weight:700; padding:2px 9px; border-radius:999px; background:var(--border); color:var(--sage-dark);}
+  .caregiver-checks{display:flex; gap:16px; flex-wrap:wrap; padding:2px 0 10px;}
+  .caregiver-check{display:flex; align-items:center; gap:6px; font-weight:700; cursor:pointer;}
+  .caregiver-check input{width:20px; height:20px; accent-color:var(--sage);}
   .entry-actions{display:flex; gap:8px; margin-top:12px;}
   .entry-actions .btn{width:auto; flex:1; padding:10px; font-size:0.875rem; margin-bottom:0;}
   .entry-actions + .entry-actions{margin-top:8px;}
@@ -288,6 +293,7 @@
       <div class="entry-card" style="border-left-color:${color}">
         <span class="child-tag" style="background:${color}">${escapeHtml(r.childName)}${r.overnight ? ' 🌙' : ''}</span>
         <p class="entry-time">${timeStr}</p>
+        ${(r.caregivers && r.caregivers.length) ? `<div class="caregiver-tags">${r.caregivers.map(c=>`<span class="caregiver-tag">${escapeHtml(c)}</span>`).join('')}</div>` : ''}
         ${r.notes ? `<p class="entry-notes">${escapeHtml(r.notes)}</p>` : ''}
         <div class="entry-actions">
           <button class="btn btn-outline" data-action="export-one" data-id="${r.id}">📅 Naptáramba</button>
@@ -510,6 +516,12 @@
     const endTime = entry ? entry.endTime : '17:00';
     const childName = entry ? entry.childName : '';
     const notes = entry ? entry.notes : '';
+    const caregivers = entry && Array.isArray(entry.caregivers) ? entry.caregivers : [];
+    const careMama = caregivers.includes('Mama');
+    const carePapa = caregivers.includes('Papa');
+    const otherValues = caregivers.filter(c => c !== 'Mama' && c !== 'Papa');
+    const careOther = otherValues.length > 0;
+    const careOtherText = otherValues.join(', ');
     const children = [...new Set(state.requests.map(r=>r.childName))].sort();
     return `
       <h3 class="modal-title">${entry ? 'Vigyázás szerkesztése' : 'Vigyázás hozzáadása'}</h3>
@@ -528,7 +540,18 @@
           <div class="field"><label id="modalEndDateLabel">${overnight?'Meddig – dátum':'Eddig – dátum'}</label><input type="date" name="endDate" id="modalEndDate" value="${endDate}" min="${startDate}" ${overnight?'':'disabled'}></div>
           <div class="field"><label id="modalEndTimeLabel">${overnight?'Hazaviszik – idő':'Eddig – idő'}</label><input type="time" name="endTime" id="modalEndTime" value="${endTime}"></div>
         </div>
-        <div class="field"><label>Megjegyzés (opcionális)</label><textarea name="notes" rows="3">${escapeHtml(notes)}</textarea></div>
+        <div class="field">
+          <label>Ki vigyáz?</label>
+          <div class="caregiver-checks">
+            <label class="caregiver-check"><input type="checkbox" name="careMama" id="modalCareMama" ${careMama?'checked':''}> Mama</label>
+            <label class="caregiver-check"><input type="checkbox" name="carePapa" id="modalCarePapa" ${carePapa?'checked':''}> Papa</label>
+            <label class="caregiver-check"><input type="checkbox" name="careOther" id="modalCareOther" ${careOther?'checked':''}> Egyéb</label>
+          </div>
+          <div class="field" id="modalCareOtherField" style="margin-bottom:0;${careOther?'':' display:none;'}">
+            <input type="text" name="careOtherText" id="modalCareOtherText" value="${escapeHtml(careOtherText)}" placeholder="pl. nagyi, szomszéd…">
+          </div>
+        </div>
+        <div class="field"><label>Megjegyzés (opcionális)</label><textarea name="notes" rows="3" placeholder="pl. hol, miért">${escapeHtml(notes)}</textarea></div>
         <div id="modalFormError" class="error-text" style="display:none"></div>
         <button type="submit" class="btn btn-primary" id="modalSubmitBtn">${entry ? 'Mentés' : 'Hozzáadás a naptárhoz'}</button>
         ${entry ? `<button type="button" class="btn btn-danger" id="modalDeleteBtn" style="margin-top:10px">🗑️ Törlés</button>` : ''}
@@ -568,6 +591,14 @@
       else if(endDateInput.value < startDateInput.value) endDateInput.value = addDays(startDateInput.value, 1);
     });
 
+    const careOtherChk = document.getElementById('modalCareOther');
+    const careOtherField = document.getElementById('modalCareOtherField');
+    const careOtherText = document.getElementById('modalCareOtherText');
+    careOtherChk.addEventListener('change', ()=>{
+      careOtherField.style.display = careOtherChk.checked ? '' : 'none';
+      if(careOtherChk.checked) careOtherText.focus();
+    });
+
     form.addEventListener('submit', async (e)=>{
       e.preventDefault();
       const fd = new FormData(form);
@@ -575,6 +606,13 @@
       const errEl = document.getElementById('modalFormError');
       if(!childName){ errEl.textContent='Add meg, melyik gyerekről van szó.'; errEl.style.display='block'; return; }
       const overnight = fd.get('overnight') === 'on';
+      const caregivers = [];
+      if(fd.get('careMama') === 'on') caregivers.push('Mama');
+      if(fd.get('carePapa') === 'on') caregivers.push('Papa');
+      if(fd.get('careOther') === 'on'){
+        const otherText = (fd.get('careOtherText')||'').trim();
+        caregivers.push(otherText || 'Egyéb');
+      }
       const data = {
         childName,
         startDate: fd.get('startDate'),
@@ -582,6 +620,7 @@
         overnight,
         endDate: overnight ? fd.get('endDate') : fd.get('startDate'),
         endTime: fd.get('endTime'),
+        caregivers,
         notes: (fd.get('notes')||'').trim(),
       };
       if(data.endDate < data.startDate){ errEl.textContent='A befejezés dátuma nem lehet a kezdés előtt.'; errEl.style.display='block'; return; }
