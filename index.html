@@ -76,6 +76,7 @@
   .entry-notes{font-size:0.875rem; margin:6px 0 0; line-height:1.4;}
   .entry-actions{display:flex; gap:8px; margin-top:12px;}
   .entry-actions .btn{width:auto; flex:1; padding:10px; font-size:0.875rem; margin-bottom:0;}
+  .entry-actions + .entry-actions{margin-top:8px;}
 
   .calendar-head{display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;}
   .calendar-head > button{background:none; border:none; font-size:1.5rem; line-height:1; color:var(--sage-dark);
@@ -100,7 +101,7 @@
   .day-more{font-size:0.55rem; font-weight:700; color:var(--muted);}
   .day-cell.selected .day-more{color:rgba(255,255,255,0.85);}
 
-  .detail-title{margin:0 0 8px; font-size:1.125rem; font-weight:600; color:var(--sage-dark);}
+  .detail-title{margin:0; font-size:1.125rem; font-weight:600; color:var(--sage-dark);}
   .muted-text{color:var(--muted); font-size:0.875rem; margin:0;}
   .list-date-header{font-family:'Fredoka',system-ui,sans-serif; font-size:0.875rem; font-weight:700;
     color:var(--sage-dark); margin:12px 0 6px;}
@@ -110,32 +111,60 @@
   .empty-state p:first-child{font-weight:700; margin:0 0 4px;}
 
   .password-gate{text-align:center;}
-  .lock-icon{font-size:2rem; margin-bottom:8px;}
+  .lock-icon{font-size:2rem; margin-bottom:8px; text-align:center;}
 
   .loading{text-align:center; padding:60px 0; color:var(--muted); font-weight:700;}
 
   .setup-warning{background:#FBEAEA; border:1px solid #F2CFCF; color:var(--danger);}
   .setup-warning code{background:#fff; padding:2px 6px; border-radius:6px; font-size:0.85em;}
+
+  .header-row{display:flex; align-items:flex-start; justify-content:space-between; gap:10px;}
+  .header-text{flex:1; min-width:0;}
+  .app-header h1{cursor:default; user-select:none;}
+  .dev-btn{display:none; align-items:center; justify-content:center; flex-shrink:0;
+    width:38px; height:38px; margin-top:2px; border:none; border-radius:12px;
+    background:var(--border); color:var(--sage-dark); font-size:1.1rem; cursor:pointer;}
+  .dev-panel{margin-top:8px;}
+  .dev-panel h3{margin:0 0 12px; font-size:1.05rem; color:var(--sage-dark);}
+  .dev-saved{text-align:center; margin-top:8px; display:none;}
+
+  .day-detail-head{display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:10px;}
+  .btn-add-day{width:auto; padding:8px 16px; font-size:0.8rem; flex-shrink:0; margin-bottom:0;}
+
+  .modal-overlay{position:fixed; inset:0; background:rgba(58,51,44,0.45); display:flex;
+    align-items:center; justify-content:center; z-index:100; padding:16px;}
+  .modal-card{background:var(--card); border-radius:24px; padding:20px; width:100%; max-width:440px;
+    max-height:90vh; overflow-y:auto; position:relative;}
+  .modal-close{position:absolute; top:14px; right:14px; width:32px; height:32px; border-radius:50%;
+    border:none; background:var(--border); color:var(--ink); font-size:1rem; line-height:1;
+    cursor:pointer; display:flex; align-items:center; justify-content:center;}
+  .modal-title{margin:0 0 14px; padding-right:36px; font-size:1.25rem; font-weight:600; color:var(--sage-dark);}
 </style>
 </head>
 <body>
   <div class="page">
     <header class="app-header">
-      <h1>Gyerekvigyázás</h1>
-      <p>Családi naptár a gyerekvigyázás összehangolásához</p>
+      <div class="header-row">
+        <div class="header-text">
+          <h1 id="appTitle">Gyerekvigyázás</h1>
+          <p>Családi naptár a gyerekvigyázás összehangolásához</p>
+        </div>
+        <button id="devBtn" class="dev-btn" aria-label="Beállítások">⚙</button>
+      </div>
+      <div id="devPanel"></div>
     </header>
     <nav class="tab-bar">
-      <button class="tab-btn" data-tab="form">Vigyázás hozzáadása</button>
       <button class="tab-btn" data-tab="calendar">Naptár</button>
       <button class="tab-btn" data-tab="list">Összes időpont</button>
     </nav>
     <div id="toast" class="toast hidden"></div>
     <main id="content"></main>
+    <div id="modal-root"></div>
   </div>
 
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-  import { getFirestore, collection, addDoc, deleteDoc, doc, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+  import { getFirestore, collection, addDoc, updateDoc, deleteDoc, doc, setDoc, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
   // ====================================================================
   //  IDE ÍRD BE A SAJÁT FIREBASE-ADATAIDAT (lásd az útmutató 2. lépését)
@@ -155,7 +184,7 @@
   const HETNAPOK_ROVID = ['H','K','Sze','Cs','P','Szo','V'];
   const HETNAPOK_TELJES = ['vasárnap','hétfő','kedd','szerda','csütörtök','péntek','szombat'];
   const CHILD_COLORS = ['#BD5429','#6B7A35','#3D6A91','#7E5790','#8A6A12','#A8447E','#347468'];
-  const PASSWORD = 'alma123'; // ide írhatod át a saját jelszavadat
+  const DEFAULT_PASSWORD = 'alma123'; // ide írhatod a kezdeti jelszót (a fejlesztői panelből is módosítható)
 
   // ---------- Dátum segédfüggvények ----------
   function toISODate(d){ const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,'0'), dd=String(d.getDate()).padStart(2,'0'); return `${y}-${m}-${dd}`; }
@@ -225,9 +254,17 @@
     ready: false,
     requests: [],
     unlocked: false,
+    devUnlocked: false,
+    devPanelOpen: false,
+    settings: { password: DEFAULT_PASSWORD, passwordEnabled: true },
     cursor: (()=>{ const d=new Date(); return {y:d.getFullYear(), m:d.getMonth()}; })(),
     selected: todayISO(),
+    modal: null, // {type:'password', next:{...}|null} | {type:'form', mode:'add'|'edit', date?, entry?}
   };
+
+  function isUnlocked(){
+    return !state.settings.passwordEnabled || state.unlocked;
+  }
 
   // ---------- Toast ----------
   let toastTimer = null;
@@ -242,115 +279,6 @@
   // ---------- Render: belépő képernyő ----------
   function renderLoading(){ return `<div class="loading">Betöltés…</div>`; }
 
-  function renderPasswordGate(){
-    return `
-      <div class="card password-gate">
-        <div class="lock-icon">🔒</div>
-        <p style="font-weight:700;margin:0 0 12px">Ehhez jelszó szükséges</p>
-        <form id="pwForm">
-          <div class="field"><input type="password" name="pw" autocomplete="off" style="text-align:center"></div>
-          <div id="pwError" class="error-text" style="display:none">Hibás jelszó, próbáld újra.</div>
-          <button type="submit" class="btn btn-primary">Belépés</button>
-        </form>
-      </div>`;
-  }
-
-  // ---------- Render: Új igénylés ----------
-  function renderForm(){
-    const today = todayISO();
-    const children = [...new Set(state.requests.map(r=>r.childName))].sort();
-    return `
-      <form id="addForm" class="card">
-        <div class="field">
-          <label for="childNameInput">Melyik gyerek?</label>
-          <input id="childNameInput" name="childName" list="children-list" required>
-          <datalist id="children-list">${children.map(c=>`<option value="${escapeHtml(c)}">`).join('')}</datalist>
-        </div>
-        <div class="row-2">
-          <div class="field"><label>Mettől – dátum</label><input type="date" name="startDate" id="startDateInput" value="${today}" required></div>
-          <div class="field"><label>Mettől – idő</label><input type="time" name="startTime" value="08:00" required></div>
-        </div>
-        <label class="checkbox-row"><input type="checkbox" name="overnight" id="overnightChk"> 🌙 Ottalvós lesz</label>
-        <div class="row-2">
-          <div class="field"><label id="endDateLabel">Eddig – dátum</label><input type="date" name="endDate" id="endDateInput" value="${today}" min="${today}" disabled></div>
-          <div class="field"><label id="endTimeLabel">Eddig – idő</label><input type="time" name="endTime" id="endTimeInput" value="17:00"></div>
-        </div>
-        <div class="field"><label>Megjegyzés (opcionális)</label><textarea name="notes" rows="3"></textarea></div>
-        <div id="formError" class="error-text" style="display:none"></div>
-        <button type="submit" class="btn btn-primary" id="submitBtn">Hozzáadás a naptárhoz</button>
-      </form>`;
-  }
-
-  function initFormHandlers(content){
-    const form = content.querySelector('#addForm');
-    const chk = form.querySelector('#overnightChk');
-    const startDateInput = form.querySelector('#startDateInput');
-    const endDateInput = form.querySelector('#endDateInput');
-    const endTimeInput = form.querySelector('#endTimeInput');
-    const endDateLabel = form.querySelector('#endDateLabel');
-    const endTimeLabel = form.querySelector('#endTimeLabel');
-
-    chk.addEventListener('change', ()=>{
-      if(chk.checked){
-        endDateInput.disabled = false;
-        endDateInput.min = startDateInput.value;
-        endDateInput.value = addDays(startDateInput.value, 1);
-        endTimeInput.value = '09:00';
-        endDateLabel.textContent = 'Meddig – dátum';
-        endTimeLabel.textContent = 'Hazaviszik – idő';
-      } else {
-        endDateInput.disabled = true;
-        endDateInput.value = startDateInput.value;
-        endTimeInput.value = '17:00';
-        endDateLabel.textContent = 'Eddig – dátum';
-        endTimeLabel.textContent = 'Eddig – idő';
-      }
-    });
-
-    startDateInput.addEventListener('change', ()=>{
-      endDateInput.min = startDateInput.value;
-      if(!chk.checked) endDateInput.value = startDateInput.value;
-      else if(endDateInput.value < startDateInput.value) endDateInput.value = addDays(startDateInput.value, 1);
-    });
-
-    form.addEventListener('submit', async (e)=>{
-      e.preventDefault();
-      const fd = new FormData(form);
-      const childName = (fd.get('childName')||'').trim();
-      const errEl = form.querySelector('#formError');
-      if(!childName){ errEl.textContent='Add meg, melyik gyerekről van szó.'; errEl.style.display='block'; return; }
-      const overnight = fd.get('overnight') === 'on';
-      const data = {
-        childName,
-        startDate: fd.get('startDate'),
-        startTime: fd.get('startTime'),
-        overnight,
-        endDate: overnight ? fd.get('endDate') : fd.get('startDate'),
-        endTime: fd.get('endTime'),
-        notes: (fd.get('notes')||'').trim(),
-      };
-      if(data.endDate < data.startDate){ errEl.textContent='A befejezés dátuma nem lehet a kezdés előtt.'; errEl.style.display='block'; return; }
-      errEl.style.display='none';
-
-      const btn = form.querySelector('#submitBtn');
-      btn.disabled = true;
-      const ok = await addEvent(data);
-      if(ok){
-        btn.classList.add('added');
-        btn.textContent = '✓ Hozzáadva!';
-        form.reset();
-        endDateInput.disabled = true;
-        endDateInput.value = startDateInput.value;
-        endTimeInput.value = '17:00';
-        endDateLabel.textContent = 'Eddig – dátum';
-        endTimeLabel.textContent = 'Eddig – idő';
-        setTimeout(()=>{ btn.classList.remove('added'); btn.textContent='Hozzáadás a naptárhoz'; btn.disabled=false; }, 2000);
-      } else {
-        btn.disabled = false;
-      }
-    });
-  }
-
   // ---------- Render: egy esemény kártya (Naptár + Lista közös) ----------
   function renderEntryCard(r){
     const sameDay = r.startDate === r.endDate;
@@ -362,8 +290,11 @@
         <p class="entry-time">${timeStr}</p>
         ${r.notes ? `<p class="entry-notes">${escapeHtml(r.notes)}</p>` : ''}
         <div class="entry-actions">
-          <button class="btn btn-outline" data-action="export-one" data-id="${r.id}">Naptáramba</button>
-          ${state.unlocked ? `<button class="btn btn-danger" data-action="delete" data-id="${r.id}">Törlés</button>` : ''}
+          <button class="btn btn-outline" data-action="export-one" data-id="${r.id}">📅 Naptáramba</button>
+        </div>
+        <div class="entry-actions">
+          <button class="btn btn-outline" data-action="edit" data-id="${r.id}">✏️ Szerkesztés</button>
+          <button class="btn btn-danger" data-action="delete" data-id="${r.id}">🗑️ Törlés</button>
         </div>
       </div>`;
   }
@@ -375,11 +306,24 @@
         if(r) downloadICS(buildICS([r]), `vigyazas-${r.childName}-${r.startDate}.ics`);
       });
     });
-    content.querySelectorAll('[data-action="delete"]').forEach(btn=>{
+    content.querySelectorAll('[data-action="edit"]').forEach(btn=>{
       btn.addEventListener('click', ()=>{
-        if(confirm('Biztosan törlöd ezt a bejegyzést?')) deleteEvent(btn.dataset.id);
+        const r = state.requests.find(x=>x.id===btn.dataset.id);
+        if(r) openFormModal({ mode:'edit', entry:r });
       });
     });
+    content.querySelectorAll('[data-action="delete"]').forEach(btn=>{
+      btn.addEventListener('click', ()=> requestDelete(btn.dataset.id));
+    });
+  }
+
+  function requestDelete(id){
+    if(isUnlocked()){
+      if(confirm('Biztosan törlöd ezt a bejegyzést?')) deleteEvent(id);
+    } else {
+      state.modal = { type:'password', next: { type:'action', action:'delete', id } };
+      renderModal();
+    }
   }
 
   // ---------- Render: Naptár ----------
@@ -418,7 +362,10 @@
       </div>
       <button class="btn btn-outline" id="exportMonthBtn" ${monthReqs.length===0?'disabled':''}>Ez a hónap naptárfájlba (.ics)</button>
       <div class="card">
-        <h3 class="detail-title">${formatDateWithDay(state.selected)}</h3>
+        <div class="day-detail-head">
+          <h3 class="detail-title">${formatDateWithDay(state.selected)}</h3>
+          <button class="btn btn-primary btn-add-day" id="addForDayBtn">+ Hozzáadás</button>
+        </div>
         ${selectedReqs.length===0
           ? `<p class="muted-text">Erre a napra nincs beírva vigyázás.</p>`
           : selectedReqs.map(renderEntryCard).join('')}
@@ -452,6 +399,9 @@
         downloadICS(buildICS(monthReqs), `vigyazas-${y}-${String(m+1).padStart(2,'0')}.ics`);
       });
     }
+    content.querySelector('#addForDayBtn').addEventListener('click', ()=>{
+      openFormModal({ mode:'add', date: state.selected });
+    });
     bindEntryActions(content);
   }
 
@@ -466,7 +416,7 @@
   function renderList(){
     const sorted = [...state.requests].sort((a,b)=>(a.startDate+a.startTime).localeCompare(b.startDate+b.startTime));
     if(sorted.length===0){
-      return `<div class="card empty-state"><p>Még nincs beírt időpont.</p><p class="muted-text">Az "Új igénylés" fülön tudsz felvinni egyet.</p></div>`;
+      return `<div class="card empty-state"><p>Még nincs beírt időpont.</p><p class="muted-text">A "Naptár" fülön, egy napra kattintva tudsz felvinni egyet.</p></div>`;
     }
     let html = `<button class="btn btn-outline" id="exportAllBtn">Összes naptárfájlba (.ics)</button><div class="card">`;
     sorted.forEach((r,i)=>{
@@ -483,16 +433,215 @@
     bindEntryActions(content);
   }
 
-  function initPasswordHandlers(content){
-    const form = content.querySelector('#pwForm');
+  // ---------- Modal: jelszó + űrlap ----------
+  function renderModal(){
+    const root = document.getElementById('modal-root');
+    if(!state.modal){ root.innerHTML = ''; return; }
+    const inner = state.modal.type === 'password' ? renderPasswordModalContent() : renderFormModalContent(state.modal);
+    root.innerHTML = `
+      <div class="modal-overlay" id="modalOverlay">
+        <div class="modal-card">
+          <button class="modal-close" id="modalClose" aria-label="Bezárás">✕</button>
+          ${inner}
+        </div>
+      </div>`;
+    document.getElementById('modalOverlay').addEventListener('click', (e)=>{ if(e.target.id==='modalOverlay') closeModal(); });
+    document.getElementById('modalClose').addEventListener('click', closeModal);
+    if(state.modal.type === 'password') initModalPasswordHandlers();
+    else initModalFormHandlers();
+  }
+
+  function closeModal(){
+    state.modal = null;
+    renderModal();
+  }
+
+  function openFormModal(opts){
+    if(isUnlocked()) state.modal = { type:'form', ...opts };
+    else state.modal = { type:'password', next: { type:'form', ...opts } };
+    renderModal();
+  }
+
+  function renderPasswordModalContent(){
+    return `
+      <h3 class="modal-title">Jelszó szükséges</h3>
+      <div class="lock-icon">🔒</div>
+      <form id="modalPwForm">
+        <div class="field"><input type="password" name="pw" autocomplete="off" style="text-align:center"></div>
+        <div id="modalPwError" class="error-text" style="display:none">Hibás jelszó, próbáld újra.</div>
+        <button type="submit" class="btn btn-primary">Belépés</button>
+      </form>`;
+  }
+
+  function initModalPasswordHandlers(){
+    const form = document.getElementById('modalPwForm');
     form.addEventListener('submit', (e)=>{
       e.preventDefault();
       const val = new FormData(form).get('pw');
-      if(val === PASSWORD){ state.unlocked = true; renderContent(); }
-      else {
-        content.querySelector('#pwError').style.display='block';
+      if(val === state.settings.password){
+        state.unlocked = true;
+        const next = state.modal.next;
+        if(next && next.type === 'form'){
+          state.modal = next;
+          renderModal();
+        } else if(next && next.type === 'action' && next.action === 'delete'){
+          state.modal = null;
+          renderModal();
+          if(confirm('Biztosan törlöd ezt a bejegyzést?')) deleteEvent(next.id);
+        } else {
+          state.modal = null;
+          renderModal();
+        }
+      } else {
+        document.getElementById('modalPwError').style.display = 'block';
         form.reset();
         form.querySelector('input').focus();
+      }
+    });
+  }
+
+  function renderFormModalContent(modal){
+    const entry = modal.mode === 'edit' ? modal.entry : null;
+    const today = todayISO();
+    const startDate = entry ? entry.startDate : (modal.date || today);
+    const startTime = entry ? entry.startTime : '08:00';
+    const overnight = !!(entry ? entry.overnight : false);
+    const endDate = entry ? entry.endDate : startDate;
+    const endTime = entry ? entry.endTime : '17:00';
+    const childName = entry ? entry.childName : '';
+    const notes = entry ? entry.notes : '';
+    const children = [...new Set(state.requests.map(r=>r.childName))].sort();
+    return `
+      <h3 class="modal-title">${entry ? 'Vigyázás szerkesztése' : 'Vigyázás hozzáadása'}</h3>
+      <form id="modalForm">
+        <div class="field">
+          <label for="modalChildName">Melyik gyerek?</label>
+          <input id="modalChildName" name="childName" list="modal-children-list" value="${escapeHtml(childName)}" required>
+          <datalist id="modal-children-list">${children.map(c=>`<option value="${escapeHtml(c)}">`).join('')}</datalist>
+        </div>
+        <div class="row-2">
+          <div class="field"><label>Mettől – dátum</label><input type="date" name="startDate" id="modalStartDate" value="${startDate}" required></div>
+          <div class="field"><label>Mettől – idő</label><input type="time" name="startTime" value="${startTime}" required></div>
+        </div>
+        <label class="checkbox-row"><input type="checkbox" name="overnight" id="modalOvernightChk" ${overnight?'checked':''}> 🌙 Ottalvós lesz</label>
+        <div class="row-2">
+          <div class="field"><label id="modalEndDateLabel">${overnight?'Meddig – dátum':'Eddig – dátum'}</label><input type="date" name="endDate" id="modalEndDate" value="${endDate}" min="${startDate}" ${overnight?'':'disabled'}></div>
+          <div class="field"><label id="modalEndTimeLabel">${overnight?'Hazaviszik – idő':'Eddig – idő'}</label><input type="time" name="endTime" id="modalEndTime" value="${endTime}"></div>
+        </div>
+        <div class="field"><label>Megjegyzés (opcionális)</label><textarea name="notes" rows="3">${escapeHtml(notes)}</textarea></div>
+        <div id="modalFormError" class="error-text" style="display:none"></div>
+        <button type="submit" class="btn btn-primary" id="modalSubmitBtn">${entry ? 'Mentés' : 'Hozzáadás a naptárhoz'}</button>
+        ${entry ? `<button type="button" class="btn btn-danger" id="modalDeleteBtn" style="margin-top:10px">🗑️ Törlés</button>` : ''}
+      </form>`;
+  }
+
+  function initModalFormHandlers(){
+    const modal = state.modal;
+    const form = document.getElementById('modalForm');
+    const chk = document.getElementById('modalOvernightChk');
+    const startDateInput = document.getElementById('modalStartDate');
+    const endDateInput = document.getElementById('modalEndDate');
+    const endTimeInput = document.getElementById('modalEndTime');
+    const endDateLabel = document.getElementById('modalEndDateLabel');
+    const endTimeLabel = document.getElementById('modalEndTimeLabel');
+
+    chk.addEventListener('change', ()=>{
+      if(chk.checked){
+        endDateInput.disabled = false;
+        endDateInput.min = startDateInput.value;
+        if(endDateInput.value <= startDateInput.value) endDateInput.value = addDays(startDateInput.value, 1);
+        if(endTimeInput.value === '17:00') endTimeInput.value = '09:00';
+        endDateLabel.textContent = 'Meddig – dátum';
+        endTimeLabel.textContent = 'Hazaviszik – idő';
+      } else {
+        endDateInput.disabled = true;
+        endDateInput.value = startDateInput.value;
+        if(endTimeInput.value === '09:00') endTimeInput.value = '17:00';
+        endDateLabel.textContent = 'Eddig – dátum';
+        endTimeLabel.textContent = 'Eddig – idő';
+      }
+    });
+
+    startDateInput.addEventListener('change', ()=>{
+      endDateInput.min = startDateInput.value;
+      if(!chk.checked) endDateInput.value = startDateInput.value;
+      else if(endDateInput.value < startDateInput.value) endDateInput.value = addDays(startDateInput.value, 1);
+    });
+
+    form.addEventListener('submit', async (e)=>{
+      e.preventDefault();
+      const fd = new FormData(form);
+      const childName = (fd.get('childName')||'').trim();
+      const errEl = document.getElementById('modalFormError');
+      if(!childName){ errEl.textContent='Add meg, melyik gyerekről van szó.'; errEl.style.display='block'; return; }
+      const overnight = fd.get('overnight') === 'on';
+      const data = {
+        childName,
+        startDate: fd.get('startDate'),
+        startTime: fd.get('startTime'),
+        overnight,
+        endDate: overnight ? fd.get('endDate') : fd.get('startDate'),
+        endTime: fd.get('endTime'),
+        notes: (fd.get('notes')||'').trim(),
+      };
+      if(data.endDate < data.startDate){ errEl.textContent='A befejezés dátuma nem lehet a kezdés előtt.'; errEl.style.display='block'; return; }
+      errEl.style.display='none';
+
+      const btn = document.getElementById('modalSubmitBtn');
+      btn.disabled = true;
+      let ok;
+      if(modal.mode === 'edit') ok = await updateEvent(modal.entry.id, data);
+      else ok = await addEvent(data);
+      if(ok){
+        showToast(modal.mode === 'edit' ? 'Mentve.' : `Mentve: ${data.childName} – ${formatDate(data.startDate)}`);
+        closeModal();
+      } else {
+        btn.disabled = false;
+      }
+    });
+
+    const delBtn = document.getElementById('modalDeleteBtn');
+    if(delBtn){
+      delBtn.addEventListener('click', ()=>{
+        if(confirm('Biztosan törlöd ezt a bejegyzést?')){
+          deleteEvent(modal.entry.id);
+          closeModal();
+        }
+      });
+    }
+  }
+
+  // ---------- Fejlesztői panel ----------
+  function renderDevPanel(){
+    const el = document.getElementById('devPanel');
+    if(!state.devPanelOpen){ el.innerHTML = ''; return; }
+    el.innerHTML = `
+      <div class="card dev-panel">
+        <h3 class="ff-display">Beállítások</h3>
+        <label class="checkbox-row" style="padding-top:0">
+          <input type="checkbox" id="pwEnabledChk" ${state.settings.passwordEnabled ? 'checked' : ''}>
+          Jelszó kérése a hozzáadáshoz/szerkesztéshez/törléshez
+        </label>
+        <div class="field">
+          <label>Jelszó</label>
+          <input type="text" id="newPasswordInput" value="${escapeHtml(state.settings.password)}">
+        </div>
+        <button class="btn btn-primary" id="saveSettingsBtn">Mentés</button>
+        <p class="muted-text dev-saved" id="settingsSaved">Mentve.</p>
+      </div>`;
+    document.getElementById('saveSettingsBtn').addEventListener('click', async ()=>{
+      const pwEnabled = document.getElementById('pwEnabledChk').checked;
+      const pwVal = document.getElementById('newPasswordInput').value.trim();
+      const data = { passwordEnabled: pwEnabled, password: pwVal || state.settings.password };
+      const ok = await saveSettings(data);
+      if(ok){
+        state.settings.passwordEnabled = data.passwordEnabled;
+        state.settings.password = data.password;
+        const saved = document.getElementById('settingsSaved');
+        if(saved){
+          saved.style.display = 'block';
+          setTimeout(()=>{ if(saved) saved.style.display = 'none'; }, 2000);
+        }
       }
     });
   }
@@ -502,19 +651,36 @@
     document.querySelectorAll('.tab-btn').forEach(b=>b.classList.toggle('active', b.dataset.tab===state.tab));
     const content = document.getElementById('content');
     if(!state.ready){ content.innerHTML = renderLoading(); return; }
-    if(state.tab==='form') content.innerHTML = state.unlocked ? renderForm() : renderPasswordGate();
-    else if(state.tab==='calendar') content.innerHTML = renderCalendar();
+    if(state.tab==='calendar') content.innerHTML = renderCalendar();
     else content.innerHTML = renderList();
 
-    if(state.tab==='form'){
-      if(state.unlocked) initFormHandlers(content);
-      else initPasswordHandlers(content);
-    } else if(state.tab==='calendar') initCalendarHandlers(content);
+    if(state.tab==='calendar') initCalendarHandlers(content);
     else initListHandlers(content);
   }
 
   document.querySelectorAll('.tab-btn').forEach(btn=>{
     btn.addEventListener('click', ()=>{ state.tab = btn.dataset.tab; renderContent(); });
+  });
+
+  // ---------- Rejtett fejlesztői panel feloldása (10x kattintás a címre) ----------
+  let titleClickCount = 0;
+  let titleClickTimer = null;
+  document.getElementById('appTitle').addEventListener('click', ()=>{
+    titleClickCount++;
+    clearTimeout(titleClickTimer);
+    titleClickTimer = setTimeout(()=>{ titleClickCount = 0; }, 2000);
+    if(titleClickCount >= 10){
+      titleClickCount = 0;
+      if(!state.devUnlocked){
+        state.devUnlocked = true;
+        document.getElementById('devBtn').style.display = 'flex';
+        showToast('Fejlesztői panel feloldva.');
+      }
+    }
+  });
+  document.getElementById('devBtn').addEventListener('click', ()=>{
+    state.devPanelOpen = !state.devPanelOpen;
+    renderDevPanel();
   });
 
   // ---------- Firebase ----------
@@ -531,10 +697,20 @@
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
     const eventsCol = collection(db, 'events');
+    const settingsRef = doc(db, 'settings', 'config');
 
     async function addEvent(data){
       try{
         await addDoc(eventsCol, { ...data, createdAt: serverTimestamp() });
+        return true;
+      }catch(err){
+        showToast('Hiba történt a mentés közben: ' + err.message, true);
+        return false;
+      }
+    }
+    async function updateEventImpl(id, data){
+      try{
+        await updateDoc(doc(db, 'events', id), data);
         return true;
       }catch(err){
         showToast('Hiba történt a mentés közben: ' + err.message, true);
@@ -549,9 +725,20 @@
         showToast('Hiba történt a törlés közben: ' + err.message, true);
       }
     }
+    async function saveSettingsImpl(data){
+      try{
+        await setDoc(settingsRef, data, { merge: true });
+        return true;
+      }catch(err){
+        showToast('Hiba történt a mentés közben: ' + err.message, true);
+        return false;
+      }
+    }
     // globálissá tesszük, hogy a fenti handler-ek elérjék
     window.addEvent = addEvent;
+    window.updateEvent = updateEventImpl;
     window.deleteEvent = deleteEvent;
+    window.saveSettings = saveSettingsImpl;
 
     onSnapshot(eventsCol, (snap)=>{
       state.requests = snap.docs.map(d=>({ id:d.id, ...d.data() }));
@@ -564,12 +751,23 @@
       showToast('Nem sikerült csatlakozni az adatbázishoz: ' + err.message, true);
     });
 
+    onSnapshot(settingsRef, (snap)=>{
+      if(snap.exists()){
+        const data = snap.data();
+        if(typeof data.passwordEnabled === 'boolean') state.settings.passwordEnabled = data.passwordEnabled;
+        if(typeof data.password === 'string' && data.password) state.settings.password = data.password;
+      }
+      if(state.devPanelOpen) renderDevPanel();
+    }, ()=>{ /* ha nincs settings doksi vagy nincs jogosultság, marad az alapérték */ });
+
     renderContent();
   }
 
-  // a form/lista/naptár handlerek window.addEvent / window.deleteEvent-et hívják
+  // a form/lista/naptár handlerek window.addEvent / window.updateEvent / window.deleteEvent / window.saveSettings-t hívják
   function addEvent(data){ return window.addEvent(data); }
+  function updateEvent(id, data){ return window.updateEvent(id, data); }
   function deleteEvent(id){ return window.deleteEvent(id); }
+  function saveSettings(data){ return window.saveSettings(data); }
 </script>
 </body>
 </html>
