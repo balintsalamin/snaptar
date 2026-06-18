@@ -170,6 +170,7 @@
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
   import { getFirestore, collection, addDoc, updateDoc, deleteDoc, doc, setDoc, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+  import { getMessaging, getToken, onMessage } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging.js";
 
   // ====================================================================
   //  IDE ÍRD BE A SAJÁT FIREBASE-ADATAIDAT (lásd az útmutató 2. lépését)
@@ -190,6 +191,8 @@
   const HETNAPOK_TELJES = ['vasárnap','hétfő','kedd','szerda','csütörtök','péntek','szombat'];
   const CHILD_COLORS = ['#BD5429','#6B7A35','#3D6A91','#7E5790','#8A6A12','#A8447E','#347468'];
   const DEFAULT_PASSWORD = 'alma123'; // ide írhatod a kezdeti jelszót (a fejlesztői panelből is módosítható)
+  // A VAPID kulcsot a Firebase Console > Project Settings > Cloud Messaging > Web Push certificates menüpontban generálhatod
+  const VAPID_KEY = 'IDE_MASOLD_A_VAPID_KULCSOT';
 
   // ---------- Dátum segédfüggvények ----------
   function toISODate(d){ const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,'0'), dd=String(d.getDate()).padStart(2,'0'); return `${y}-${m}-${dd}`; }
@@ -262,6 +265,8 @@
     devUnlocked: false,
     devPanelOpen: false,
     settings: { password: DEFAULT_PASSWORD, passwordEnabled: true },
+    notifSettings: { notifyNewEvent: true, notifyDayBefore: true, notifyAtTime: true },
+    fcmToken: null,
     cursor: (()=>{ const d=new Date(); return {y:d.getFullYear(), m:d.getMonth()}; })(),
     selected: todayISO(),
     modal: null, // {type:'password', next:{...}|null} | {type:'form', mode:'add'|'edit', date?, entry?}
@@ -654,9 +659,28 @@
   function renderDevPanel(){
     const el = document.getElementById('devPanel');
     if(!state.devPanelOpen){ el.innerHTML = ''; return; }
+
+    const notifSupported = ('Notification' in window) && ('serviceWorker' in navigator);
+    const perm = notifSupported ? Notification.permission : 'unsupported';
+    let notifStatusText, notifBtnText;
+    if(!notifSupported){
+      notifStatusText = '⚠ A böngésző nem támogatja az értesítéseket.';
+      notifBtnText = null;
+    } else if(perm === 'denied'){
+      notifStatusText = '🚫 Blokkolva a böngészőben – engedélyezd kézzel a böngésző beállításaiban.';
+      notifBtnText = null;
+    } else if(perm === 'granted' && state.fcmToken){
+      notifStatusText = '✅ Értesítések be vannak kapcsolva erre az eszközre.';
+      notifBtnText = 'Beállítások frissítése';
+    } else {
+      notifStatusText = 'Az értesítések még nincsenek bekapcsolva erre az eszközre.';
+      notifBtnText = 'Értesítések engedélyezése';
+    }
+
     el.innerHTML = `
       <div class="card dev-panel">
         <h3 class="ff-display">Beállítások</h3>
+
         <label class="checkbox-row" style="padding-top:0">
           <input type="checkbox" id="pwEnabledChk" ${state.settings.passwordEnabled ? 'checked' : ''}>
           Jelszó kérése a hozzáadáshoz/szerkesztéshez/törléshez
@@ -666,8 +690,27 @@
           <input type="text" id="newPasswordInput" value="${escapeHtml(state.settings.password)}">
         </div>
         <button class="btn btn-primary" id="saveSettingsBtn">Mentés</button>
-        <p class="muted-text dev-saved" id="settingsSaved">Mentve.</p>
+        <p class="muted-text" id="settingsSaved" style="display:none; margin-top:8px">Mentve.</p>
+
+        <hr style="border:none; border-top:1px solid var(--border); margin:16px 0">
+        <h4 style="margin:0 0 8px; font-family:'Fredoka',sans-serif; font-weight:600; color:var(--sage-dark)">📳 Push értesítések</h4>
+        <p style="font-size:0.8rem; color:var(--muted); margin:0 0 10px">${notifStatusText}</p>
+        <label class="checkbox-row" style="padding-top:0">
+          <input type="checkbox" id="notifNewEvent" ${state.notifSettings.notifyNewEvent?'checked':''}>
+          Új beírt időpont értesítés
+        </label>
+        <label class="checkbox-row" style="padding-top:0">
+          <input type="checkbox" id="notifDayBefore" ${state.notifSettings.notifyDayBefore?'checked':''}>
+          Emlékeztető egy nappal előtte (reggel 8:00)
+        </label>
+        <label class="checkbox-row" style="padding-top:0">
+          <input type="checkbox" id="notifAtTime" ${state.notifSettings.notifyAtTime?'checked':''}>
+          Emlékeztető pontosan az időpont kezdetén
+        </label>
+        ${notifBtnText ? `<button class="btn btn-primary" id="enableNotifBtn" style="margin-top:4px">${notifBtnText}</button>` : ''}
+        <p class="muted-text" id="notifSaved" style="display:none; margin-top:8px">Mentve.</p>
       </div>`;
+
     document.getElementById('saveSettingsBtn').addEventListener('click', async ()=>{
       const pwEnabled = document.getElementById('pwEnabledChk').checked;
       const pwVal = document.getElementById('newPasswordInput').value.trim();
@@ -677,12 +720,33 @@
         state.settings.passwordEnabled = data.passwordEnabled;
         state.settings.password = data.password;
         const saved = document.getElementById('settingsSaved');
-        if(saved){
-          saved.style.display = 'block';
-          setTimeout(()=>{ if(saved) saved.style.display = 'none'; }, 2000);
-        }
+        if(saved){ saved.style.display='block'; setTimeout(()=>{ if(saved) saved.style.display='none'; }, 2000); }
       }
     });
+
+    const enableBtn = document.getElementById('enableNotifBtn');
+    if(enableBtn){
+      enableBtn.addEventListener('click', async ()=>{
+        const prefs = {
+          notifyNewEvent: document.getElementById('notifNewEvent').checked,
+          notifyDayBefore: document.getElementById('notifDayBefore').checked,
+          notifyAtTime: document.getElementById('notifAtTime').checked,
+        };
+        state.notifSettings = prefs;
+        enableBtn.disabled = true;
+        enableBtn.textContent = 'Folyamatban…';
+        if(state.fcmToken){
+          await saveNotifPrefs(prefs);
+          enableBtn.disabled = false;
+          const saved = document.getElementById('notifSaved');
+          if(saved){ saved.style.display='block'; setTimeout(()=>{ if(saved) saved.style.display='none'; }, 2000); }
+          enableBtn.textContent = 'Beállítások frissítése';
+        } else {
+          await registerPush(prefs);
+          renderDevPanel();
+        }
+      });
+    }
   }
 
   // ---------- Fő render ----------
@@ -737,47 +801,83 @@
     const db = getFirestore(app);
     const eventsCol = collection(db, 'events');
     const settingsRef = doc(db, 'settings', 'config');
+    const messaging = getMessaging(app);
 
     async function addEvent(data){
-      try{
-        await addDoc(eventsCol, { ...data, createdAt: serverTimestamp() });
-        return true;
-      }catch(err){
-        showToast('Hiba történt a mentés közben: ' + err.message, true);
-        return false;
-      }
+      try{ await addDoc(eventsCol, { ...data, createdAt: serverTimestamp() }); return true; }
+      catch(err){ showToast('Hiba történt a mentés közben: ' + err.message, true); return false; }
     }
     async function updateEventImpl(id, data){
-      try{
-        await updateDoc(doc(db, 'events', id), data);
-        return true;
-      }catch(err){
-        showToast('Hiba történt a mentés közben: ' + err.message, true);
-        return false;
-      }
+      try{ await updateDoc(doc(db, 'events', id), data); return true; }
+      catch(err){ showToast('Hiba történt a mentés közben: ' + err.message, true); return false; }
     }
     async function deleteEvent(id){
-      try{
-        await deleteDoc(doc(db, 'events', id));
-        showToast('Törölve.');
-      }catch(err){
-        showToast('Hiba történt a törlés közben: ' + err.message, true);
-      }
+      try{ await deleteDoc(doc(db, 'events', id)); showToast('Törölve.'); }
+      catch(err){ showToast('Hiba történt a törlés közben: ' + err.message, true); }
     }
     async function saveSettingsImpl(data){
-      try{
-        await setDoc(settingsRef, data, { merge: true });
-        return true;
-      }catch(err){
-        showToast('Hiba történt a mentés közben: ' + err.message, true);
-        return false;
+      try{ await setDoc(settingsRef, data, { merge: true }); return true; }
+      catch(err){ showToast('Hiba történt a mentés közben: ' + err.message, true); return false; }
+    }
+
+    // --- Push értesítések ---
+    let swRegistration = null;
+    if('serviceWorker' in navigator){
+      navigator.serviceWorker.register('./firebase-messaging-sw.js')
+        .then(reg => { swRegistration = reg; })
+        .catch(err => console.warn('Service Worker hiba:', err));
+    }
+
+    // Előtérben lévő FCM üzenetek kezelése (amikor nyitva van az oldal)
+    onMessage(messaging, (payload) => {
+      const n = payload.notification || {};
+      const title = n.title || 'Értesítés';
+      const body = n.body || '';
+      if(Notification.permission === 'granted'){
+        new Notification(title, { body, icon: './icon-192.png', badge: './icon-72.png' });
+      } else {
+        showToast(title + (body ? ': ' + body : ''));
+      }
+    });
+
+    async function registerPushImpl(prefs){
+      if(!('Notification' in window) || !('serviceWorker' in navigator)){
+        showToast('A böngésző nem támogatja az értesítéseket.', true); return;
+      }
+      if(VAPID_KEY === 'IDE_MASOLD_A_VAPID_KULCSOT'){
+        showToast('A VAPID kulcs nincs beállítva (lásd az útmutatót).', true); return;
+      }
+      try {
+        const perm = await Notification.requestPermission();
+        if(perm !== 'granted'){ showToast('Az értesítések nincsenek engedélyezve.', true); return; }
+        const swReg = swRegistration || await navigator.serviceWorker.ready;
+        const token = await getToken(messaging, { vapidKey: VAPID_KEY, serviceWorkerRegistration: swReg });
+        if(!token){ showToast('Nem sikerült a push token lekérése.', true); return; }
+        state.fcmToken = token;
+        state.notifSettings = prefs || state.notifSettings;
+        await setDoc(doc(db, 'tokens', token), {
+          token,
+          ...state.notifSettings,
+          updatedAt: serverTimestamp()
+        });
+        showToast('Értesítések sikeresen bekapcsolva! ✓');
+      } catch(err){
+        showToast('Hiba: ' + err.message, true);
       }
     }
-    // globálissá tesszük, hogy a fenti handler-ek elérjék
+    async function saveNotifPrefsImpl(prefs){
+      if(!state.fcmToken) return;
+      try {
+        await setDoc(doc(db, 'tokens', state.fcmToken), { ...prefs, updatedAt: serverTimestamp() }, { merge: true });
+      } catch(err){ showToast('Hiba az értesítési beállítások mentésekor.', true); }
+    }
+
     window.addEvent = addEvent;
     window.updateEvent = updateEventImpl;
     window.deleteEvent = deleteEvent;
     window.saveSettings = saveSettingsImpl;
+    window.registerPush = registerPushImpl;
+    window.saveNotifPrefs = saveNotifPrefsImpl;
 
     onSnapshot(eventsCol, (snap)=>{
       state.requests = snap.docs.map(d=>({ id:d.id, ...d.data() }));
@@ -785,8 +885,7 @@
       state.ready = true;
       if(!wasReady || state.tab==='calendar' || state.tab==='list') renderContent();
     }, (err)=>{
-      state.ready = true;
-      renderContent();
+      state.ready = true; renderContent();
       showToast('Nem sikerült csatlakozni az adatbázishoz: ' + err.message, true);
     });
 
@@ -797,16 +896,18 @@
         if(typeof data.password === 'string' && data.password) state.settings.password = data.password;
       }
       if(state.devPanelOpen) renderDevPanel();
-    }, ()=>{ /* ha nincs settings doksi vagy nincs jogosultság, marad az alapérték */ });
+    }, ()=>{ /* marad az alapérték */ });
 
     renderContent();
   }
 
-  // a form/lista/naptár handlerek window.addEvent / window.updateEvent / window.deleteEvent / window.saveSettings-t hívják
+  // a handler-ek window.*-on keresztül hívják a Firebase-blokkban definiált függvényeket
   function addEvent(data){ return window.addEvent(data); }
   function updateEvent(id, data){ return window.updateEvent(id, data); }
   function deleteEvent(id){ return window.deleteEvent(id); }
   function saveSettings(data){ return window.saveSettings(data); }
+  function registerPush(prefs){ return window.registerPush(prefs); }
+  function saveNotifPrefs(prefs){ return window.saveNotifPrefs(prefs); }
 </script>
 </body>
 </html>
