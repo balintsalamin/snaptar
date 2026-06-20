@@ -841,11 +841,11 @@
 
     // Előtérben lévő FCM üzenetek kezelése (amikor nyitva van az oldal)
     onMessage(messaging, (payload) => {
-      const n = payload.notification || {};
-      const title = n.title || 'Értesítés';
-      const body = n.body || '';
+      const d = payload.data || {};
+      const title = d.title || 'Értesítés';
+      const body = d.body || '';
       if(Notification.permission === 'granted'){
-        new Notification(title, { body, icon: './icon-192.png', badge: './icon-72.png' });
+        new Notification(title, { body, icon: './icon-192.png', badge: './icon-72.png', tag: (d.tag || 'vigyazas') + '-' + Date.now() });
       } else {
         showToast(title + (body ? ': ' + body : ''));
       }

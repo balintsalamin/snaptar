@@ -18,15 +18,14 @@ const messaging = firebase.messaging();
 
 // Háttérben érkező FCM üzenetek (oldal nincs aktívan megnyitva)
 messaging.onBackgroundMessage(function(payload) {
-  const n = payload.notification || {};
-  const title = n.title || 'Gyerekvigyázás';
-  const body = n.body || '';
+  const d = payload.data || {};
+  const title = d.title || 'Gyerekvigyázás';
+  const body = d.body || '';
   self.registration.showNotification(title, {
     body,
     icon: './icon-192.png',
     badge: './icon-72.png',
-    tag: payload.data && payload.data.tag ? payload.data.tag : 'vigyazas',
-    renotify: true,
+    tag: (d.tag || 'vigyazas') + '-' + Date.now(),
     data: { url: self.location.origin + self.registration.scope }
   });
 });
